@@ -3,7 +3,7 @@ class Database {
     private $host = 'localhost';
     private $db_name = 'salgados_da_sara';
     private $username = 'postgres';
-    private $password = 'password';
+    private $password = 'postgres';
     private $port = '5432';
     public $conn;
 
