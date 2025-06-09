@@ -1,160 +1,102 @@
 // Authentication Module
 const Auth = {
-    // Initialize default users
-    init: () => {
-        const users = Utils.storage.get('users') || [];
-        if (users.length === 0) {
-            // Create default admin user
-            const defaultUsers = [
-                {
-                    id: Utils.generateId(),
-                    name: 'Administrador',
-                    phone: '(00) 00000-0000',
-                    email: 'admin@salgadosdasara.com',
-                    address: 'Rua Ida Berlet, 1738 B',
-                    number: '1738',
-                    complement: 'B',
-                    city: 'Quinze de Novembro',
-                    password: '123456',
-                    isAdmin: true,
-                    createdAt: new Date().toISOString()
-                }
-            ];
-            Utils.storage.set('users', defaultUsers);
-        }
+    currentUser: null,
+    currentAdmin: null,
 
-        // Initialize admin users
-        const adminUsers = Utils.storage.get('adminUsers') || [];
-        if (adminUsers.length === 0) {
-            const defaultAdmins = [
-                {
-                    id: Utils.generateId(),
-                    username: 'sara',
-                    password: '123',
-                    role: 'admin',
-                    createdAt: new Date().toISOString()
-                }
-            ];
-            Utils.storage.set('adminUsers', defaultAdmins);
-        }
+    // Initialize
+    init: () => {
+        // Carregar usuário do localStorage (para manter sessão)
+        Auth.currentUser = Utils.storage.get('currentUser');
+        Auth.currentAdmin = Utils.storage.get('currentAdmin');
     },
 
     // Login user
-    login: (phone, password) => {
-        const users = Utils.storage.get('users') || [];
-        const user = users.find(u => u.phone === phone && u.password === password);
-        
-        if (user) {
-            Utils.storage.set('currentUser', user);
-            return { success: true, user };
+    login: async (phone, password) => {
+        try {
+            const response = await API.auth.login(phone, password);
+            
+            if (response.success) {
+                Auth.currentUser = response.user;
+                Utils.storage.set('currentUser', response.user);
+                return { success: true, user: response.user };
+            }
+            
+            return { success: false, message: response.message };
+        } catch (error) {
+            return { success: false, message: error.message };
         }
-        
-        return { success: false, message: 'Telefone ou senha incorretos' };
     },
 
     // Register user
-    register: (userData) => {
-        const users = Utils.storage.get('users') || [];
-        
-        // Check if user already exists
-        const existingUser = users.find(u => u.phone === userData.phone || u.email === userData.email);
-        if (existingUser) {
-            return { success: false, message: 'Usuário já cadastrado com este telefone ou email' };
+    register: async (userData) => {
+        try {
+            const response = await API.auth.register(userData);
+            
+            if (response.success) {
+                Auth.currentUser = response.user;
+                Utils.storage.set('currentUser', response.user);
+                return { success: true, user: response.user };
+            }
+            
+            return { success: false, errors: response.errors };
+        } catch (error) {
+            return { success: false, message: error.message };
         }
-
-        // Validate data
-        const validationRules = {
-            name: { required: true, label: 'Nome completo' },
-            phone: { required: true, phone: true, label: 'Telefone' },
-            email: { required: true, email: true, label: 'Email' },
-            address: { required: true, label: 'Endereço' },
-            number: { required: true, label: 'Número' },
-            city: { required: true, label: 'Cidade' },
-            password: { required: true, minLength: 6, label: 'Senha' },
-            confirmPassword: { required: true, match: 'password', label: 'Confirmar senha' }
-        };
-
-        const errors = Utils.validateForm(userData, validationRules);
-        if (Object.keys(errors).length > 0) {
-            return { success: false, errors };
-        }
-
-        // Create new user
-        const newUser = {
-            id: Utils.generateId(),
-            name: userData.name,
-            phone: Utils.formatPhone(userData.phone),
-            email: userData.email,
-            address: userData.address,
-            number: userData.number,
-            complement: userData.complement || '',
-            city: userData.city,
-            password: userData.password,
-            isAdmin: false,
-            createdAt: new Date().toISOString()
-        };
-
-        users.push(newUser);
-        Utils.storage.set('users', users);
-        Utils.storage.set('currentUser', newUser);
-
-        return { success: true, user: newUser };
     },
 
     // Forgot password
-    forgotPassword: (phone) => {
-        const users = Utils.storage.get('users') || [];
-        const user = users.find(u => u.phone === phone);
-        
-        if (user) {
-            // In a real app, this would send an email/SMS
-            // For demo purposes, we'll just show the password
-            return { 
-                success: true, 
-                message: `Sua senha é: ${user.password}` 
-            };
+    forgotPassword: async (phone) => {
+        try {
+            const response = await API.auth.forgotPassword(phone);
+            return response;
+        } catch (error) {
+            return { success: false, message: error.message };
         }
-        
-        return { success: false, message: 'Usuário não encontrado' };
     },
 
     // Admin login
-    adminLogin: (username, password) => {
-        const adminUsers = Utils.storage.get('adminUsers') || [];
-        const admin = adminUsers.find(a => a.username === username && a.password === password);
-        
-        if (admin) {
-            Utils.storage.set('currentAdmin', admin);
-            return { success: true, admin };
+    adminLogin: async (username, password) => {
+        try {
+            const response = await API.auth.adminLogin(username, password);
+            
+            if (response.success) {
+                Auth.currentAdmin = response.admin;
+                Utils.storage.set('currentAdmin', response.admin);
+                return { success: true, admin: response.admin };
+            }
+            
+            return { success: false, message: response.message };
+        } catch (error) {
+            return { success: false, message: error.message };
         }
-        
-        return { success: false, message: 'Usuário ou senha incorretos' };
     },
 
     // Logout
     logout: () => {
+        Auth.currentUser = null;
+        Auth.currentAdmin = null;
         Utils.storage.remove('currentUser');
         Utils.storage.remove('currentAdmin');
     },
 
     // Check if user is logged in
     isLoggedIn: () => {
-        return Utils.storage.get('currentUser') !== null;
+        return Auth.currentUser !== null;
     },
 
     // Check if admin is logged in
     isAdminLoggedIn: () => {
-        return Utils.storage.get('currentAdmin') !== null;
+        return Auth.currentAdmin !== null;
     },
 
     // Get current user
     getCurrentUser: () => {
-        return Utils.storage.get('currentUser');
+        return Auth.currentUser;
     },
 
     // Get current admin
     getCurrentAdmin: () => {
-        return Utils.storage.get('currentAdmin');
+        return Auth.currentAdmin;
     }
 };
 
@@ -163,14 +105,16 @@ document.addEventListener('DOMContentLoaded', () => {
     // Login form
     const loginForm = document.getElementById('login-form');
     if (loginForm) {
-        loginForm.addEventListener('submit', (e) => {
+        loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = new FormData(loginForm);
             const phone = formData.get('phone');
             const password = formData.get('password');
 
-            const result = Auth.login(phone, password);
+            Utils.setLoading(true);
+            const result = await Auth.login(phone, password);
+            Utils.setLoading(false);
             
             if (result.success) {
                 Utils.showMessage('Login realizado com sucesso!');
@@ -186,7 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Register form
     const registerForm = document.getElementById('register-form');
     if (registerForm) {
-        registerForm.addEventListener('submit', (e) => {
+        registerForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = new FormData(registerForm);
@@ -202,7 +146,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 confirmPassword: formData.get('confirmPassword')
             };
 
-            const result = Auth.register(userData);
+            Utils.setLoading(true);
+            const result = await Auth.register(userData);
+            Utils.setLoading(false);
             
             if (result.success) {
                 Utils.showMessage('Conta criada com sucesso!');
@@ -249,13 +195,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Forgot password form
     const forgotForm = document.getElementById('forgot-password-form');
     if (forgotForm) {
-        forgotForm.addEventListener('submit', (e) => {
+        forgotForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = new FormData(forgotForm);
             const phone = formData.get('phone');
 
-            const result = Auth.forgotPassword(phone);
+            Utils.setLoading(true);
+            const result = await Auth.forgotPassword(phone);
+            Utils.setLoading(false);
             
             if (result.success) {
                 Utils.showMessage(result.message);
@@ -268,20 +216,22 @@ document.addEventListener('DOMContentLoaded', () => {
     // Admin login form
     const adminLoginForm = document.getElementById('admin-login-form');
     if (adminLoginForm) {
-        adminLoginForm.addEventListener('submit', (e) => {
+        adminLoginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             
             const formData = new FormData(adminLoginForm);
             const username = formData.get('username');
             const password = formData.get('password');
 
-            const result = Auth.adminLogin(username, password);
+            Utils.setLoading(true);
+            const result = await Auth.adminLogin(username, password);
+            Utils.setLoading(false);
             
             if (result.success) {
                 Utils.showMessage('Login realizado com sucesso!');
                 document.getElementById('admin-login').style.display = 'none';
                 document.getElementById('admin-panel').style.display = 'flex';
-                Admin.loadOrders();
+                Admin.init();
             } else {
                 Utils.showMessage(result.message, 'error');
             }

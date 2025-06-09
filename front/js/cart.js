@@ -4,13 +4,26 @@ const Cart = {
     deliveryFee: 10.00,
 
     // Initialize cart
-    init: () => {
+    init: async () => {
         Cart.loadCart();
         Cart.updateCartCount();
         Cart.setupDeliveryOptions();
+        await Cart.loadDeliveryFee();
     },
 
-    // Load cart from localStorage
+    // Load delivery fee from API
+    loadDeliveryFee: async () => {
+        try {
+            const response = await API.config.get('delivery_fee');
+            if (response.success && response.data.delivery_fee) {
+                Cart.deliveryFee = parseFloat(response.data.delivery_fee);
+            }
+        } catch (error) {
+            console.error('Erro ao carregar taxa de entrega:', error);
+        }
+    },
+
+    // Load cart from localStorage (mantém funcionalidade local)
     loadCart: () => {
         Cart.items = Utils.storage.get('cart') || [];
         Cart.renderCart();
@@ -161,7 +174,7 @@ const Cart = {
 
         const subtotal = Cart.items.reduce((sum, item) => sum + item.totalPrice, 0);
         const isDelivery = document.querySelector('input[name="delivery"]:checked')?.value === 'delivery';
-        const deliveryFee = isDelivery ? Cart.getDeliveryFee() : 0;
+        const deliveryFee = isDelivery ? Cart.deliveryFee : 0;
         const total = subtotal + deliveryFee;
 
         subtotalEl.textContent = Utils.formatCurrency(subtotal);
@@ -173,12 +186,6 @@ const Cart = {
             continueBtn.disabled = Cart.items.length === 0;
             continueBtn.style.opacity = Cart.items.length === 0 ? '0.5' : '1';
         }
-    },
-
-    // Get delivery fee
-    getDeliveryFee: () => {
-        const config = Utils.storage.get('appConfig') || {};
-        return config.deliveryFee || Cart.deliveryFee;
     },
 
     // Clear cart
@@ -193,7 +200,7 @@ const Cart = {
     getOrderSummary: () => {
         const subtotal = Cart.items.reduce((sum, item) => sum + item.totalPrice, 0);
         const isDelivery = document.querySelector('input[name="delivery"]:checked')?.value === 'delivery';
-        const deliveryFee = isDelivery ? Cart.getDeliveryFee() : 0;
+        const deliveryFee = isDelivery ? Cart.deliveryFee : 0;
         const total = subtotal + deliveryFee;
         const paymentMethod = document.querySelector('input[name="payment"]:checked')?.value || 'cash';
 
@@ -219,7 +226,7 @@ function showPayment() {
     showPage('payment');
 }
 
-function finalizeOrder() {
+async function finalizeOrder() {
     if (Cart.items.length === 0) {
         Utils.showMessage('Seu carrinho está vazio!', 'error');
         return;
@@ -233,12 +240,10 @@ function finalizeOrder() {
 
     const orderSummary = Cart.getOrderSummary();
     
-    // Create order
-    const order = {
-        id: Utils.generateId(),
-        orderNumber: Utils.generateOrderNumber(),
-        userId: currentUser.id,
-        customer: {
+    // Create order data for API
+    const orderData = {
+        user_id: currentUser.id,
+        customer_data: {
             name: currentUser.name,
             phone: currentUser.phone,
             email: currentUser.email,
@@ -249,36 +254,35 @@ function finalizeOrder() {
         },
         items: orderSummary.items,
         subtotal: orderSummary.subtotal,
-        deliveryFee: orderSummary.deliveryFee,
+        delivery_fee: orderSummary.deliveryFee,
         total: orderSummary.total,
-        isDelivery: orderSummary.isDelivery,
-        paymentMethod: orderSummary.paymentMethod,
-        status: 'pending',
-        statusHistory: [
-            {
-                status: 'pending',
-                timestamp: new Date().toISOString(),
-                description: 'Pedido recebido - Aguardando confirmação'
-            }
-        ],
-        createdAt: new Date().toISOString()
+        is_delivery: orderSummary.isDelivery,
+        payment_method: orderSummary.paymentMethod
     };
 
-    // Save order
-    const orders = Utils.storage.get('orders') || [];
-    orders.push(order);
-    Utils.storage.set('orders', orders);
+    try {
+        Utils.setLoading(true);
+        const response = await API.orders.create(orderData);
+        
+        if (response.success) {
+            // Clear cart
+            Cart.clearCart();
 
-    // Clear cart
-    Cart.clearCart();
-
-    // Show success message
-    Utils.showMessage(`Pedido ${order.orderNumber} realizado com sucesso!`);
-    
-    // Redirect to history
-    setTimeout(() => {
-        showPage('historico');
-    }, 2000);
+            // Show success message
+            Utils.showMessage(`Pedido ${response.order_number} realizado com sucesso!`);
+            
+            // Redirect to history
+            setTimeout(() => {
+                showPage('historico');
+            }, 2000);
+        } else {
+            throw new Error(response.message);
+        }
+    } catch (error) {
+        Utils.showMessage('Erro ao finalizar pedido: ' + error.message, 'error');
+    } finally {
+        Utils.setLoading(false);
+    }
 }
 
 // Initialize cart when DOM is loaded
