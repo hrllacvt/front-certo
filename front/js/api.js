@@ -1,6 +1,6 @@
 // API Service Module
 const API = {
-    baseURL: 'http://localhost:8000/api', // Altere para sua URL do backend
+    baseURL: 'http://localhost/backend/api', // Altere para sua URL do backend
     
     // Helper para fazer requisições
     async request(endpoint, options = {}) {
